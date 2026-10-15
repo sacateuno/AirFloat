@@ -58,7 +58,6 @@ NSString *const SettingsUpdatedNotification = @"SettingsUpdatedNotification";
 @property (nonatomic, strong) AirFloatSwitch* autoRestartSwitch;
 @property (nonatomic, strong) AirFloatSwitch* bitPerfectSwitch;
 @property (nonatomic, strong) AirFloatSwitch* diagnosticLogSwitch;
-@property (nonatomic, strong) UISegmentedControl* latencyControl;
 @property (nonatomic, strong) UISegmentedControl* resyncControl;
 @property (nonatomic, strong) UILabel* statusLabel;
 @property (nonatomic, strong) NSTimer* statusTimer;
@@ -158,7 +157,6 @@ NSString *const SettingsUpdatedNotification = @"SettingsUpdatedNotification";
         NSStandardUserDefaults.autoRestartServer = self.autoRestartSwitch.on;
         NSStandardUserDefaults.bitPerfectMode = self.bitPerfectSwitch.on;
         NSStandardUserDefaults.diagnosticLog = self.diagnosticLogSwitch.on;
-        NSStandardUserDefaults.latencyLevel = self.latencyControl.selectedSegmentIndex;
         NSStandardUserDefaults.resyncLevel = self.resyncControl.selectedSegmentIndex;
     }
     
@@ -348,11 +346,10 @@ NSString *const SettingsUpdatedNotification = @"SettingsUpdatedNotification";
     self.autoRestartSwitch = [self addSwitchRow:@"Auto-restart server" index:1 groupY:groupY inContainer:container];
     y = groupY + 18 + 32 * 2 + 14;
     
-    groupY = [self addGroupTitled:@"AUDIO QUALITY" rows:3 atY:y inContainer:container];
+    groupY = [self addGroupTitled:@"AUDIO QUALITY" rows:2 atY:y inContainer:container];
     self.bitPerfectSwitch = [self addSwitchRow:@"Bit-perfect mode" index:0 groupY:groupY inContainer:container];
-    self.latencyControl = [self addSegmentedRow:@"Latency" items:@[@"0.25 s", @"1 s", @"2 s"] index:1 groupY:groupY inContainer:container];
-    self.resyncControl = [self addSegmentedRow:@"Resync" items:@[@"\u00B10.1 s", @"\u00B10.5 s", @"\u00B11 s"] index:2 groupY:groupY inContainer:container];
-    y = groupY + 18 + 32 * 3 + 14;
+    self.resyncControl = [self addSegmentedRow:@"Resync" items:@[@"\u00B10.1 s", @"\u00B10.5 s", @"\u00B11 s"] index:1 groupY:groupY inContainer:container];
+    y = groupY + 18 + 32 * 2 + 14;
     
     groupY = [self addGroupTitled:@"DIAGNOSTICS" rows:1 atY:y inContainer:container];
     self.diagnosticLogSwitch = [self addSwitchRow:@"Save log" index:0 groupY:groupY inContainer:container];
@@ -390,12 +387,11 @@ NSString *const SettingsUpdatedNotification = @"SettingsUpdatedNotification";
     self.autoRestartSwitch.on = NSStandardUserDefaults.autoRestartServer;
     self.bitPerfectSwitch.on = NSStandardUserDefaults.bitPerfectMode;
     self.diagnosticLogSwitch.on = NSStandardUserDefaults.diagnosticLog;
-    self.latencyControl.selectedSegmentIndex = NSStandardUserDefaults.latencyLevel;
     self.resyncControl.selectedSegmentIndex = NSStandardUserDefaults.resyncLevel;
     
     // Targets are connected only now: setting 'on' sends a value changed event that would
     // otherwise overwrite the stored preferences with controls that are not initialized yet.
-    for (UIControl* control in @[self.wifiAwakeSwitch, self.autoRestartSwitch, self.bitPerfectSwitch, self.diagnosticLogSwitch, self.latencyControl, self.resyncControl])
+    for (UIControl* control in @[self.wifiAwakeSwitch, self.autoRestartSwitch, self.bitPerfectSwitch, self.diagnosticLogSwitch, self.resyncControl])
         [control addTarget:self action:@selector(extendedControlChanged:) forControlEvents:UIControlEventValueChanged];
     
 }

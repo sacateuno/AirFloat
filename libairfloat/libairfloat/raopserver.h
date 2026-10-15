@@ -80,8 +80,6 @@ void raop_runtime_set_log_path(const char* path);
 void raop_runtime_clear_log(void);
 long raop_runtime_log_size(void);
 void raop_runtime_set_resync_window(double seconds);
-void raop_runtime_set_audio_latency(uint32_t frames);
-uint32_t raop_runtime_get_audio_latency(void);
 void raop_runtime_get_stats(struct raop_runtime_stats_t* stats);
 void raop_runtime_reset_stats(void);
 

@@ -270,8 +270,6 @@ void raop_server_session_ended(struct raop_server_t* rs, raop_session_p session)
 
 #pragma mark - Runtime configuration and diagnostics
 
-static volatile uint32_t _raop_runtime_audio_latency = 11025;
-
 void raop_runtime_log_message(const char* message) {
     log_message(LOG_INFO, "%s", message != NULL ? message : "");
 }
@@ -298,15 +296,6 @@ long raop_runtime_log_size(void) {
 
 void raop_runtime_set_resync_window(double seconds) {
     audio_queue_set_resync_window(seconds);
-}
-
-void raop_runtime_set_audio_latency(uint32_t frames) {
-    if (frames >= 4410 && frames <= 441000)
-        _raop_runtime_audio_latency = frames;
-}
-
-uint32_t raop_runtime_get_audio_latency(void) {
-    return _raop_runtime_audio_latency;
 }
 
 void raop_runtime_get_stats(struct raop_runtime_stats_t* stats) {

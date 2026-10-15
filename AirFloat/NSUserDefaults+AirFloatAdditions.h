@@ -23,7 +23,6 @@
 @property (nonatomic) BOOL autoRestartServer;
 @property (nonatomic) BOOL bitPerfectMode;
 @property (nonatomic) BOOL diagnosticLog;
-@property (nonatomic) NSInteger latencyLevel;   // 0 = 0.25 s, 1 = 1 s, 2 = 2 s
 @property (nonatomic) NSInteger resyncLevel;    // 0 = 0.1 s, 1 = 0.5 s, 2 = 1 s
 
 @end

@@ -142,18 +142,6 @@
     
 }
 
-- (NSInteger)latencyLevel {
-    
-    return MAX(0, MIN(2, [self integerForKey:@"latencyLevel"]));
-    
-}
-
-- (void)setLatencyLevel:(NSInteger)latencyLevel {
-    
-    [self setInteger:latencyLevel forKey:@"latencyLevel"];
-    
-}
-
 - (NSInteger)resyncLevel {
     
     return MAX(0, MIN(2, [self integerForKey:@"resyncLevel"]));

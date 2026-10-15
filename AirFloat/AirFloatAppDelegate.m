@@ -188,7 +188,6 @@ static bool AirFloatShouldIgnoreSourceVolume(void) {
 #else
         @"diagnosticLog": @NO,
 #endif
-        @"latencyLevel": @0,
         @"resyncLevel": @1
     }];
     
@@ -306,10 +305,8 @@ static bool AirFloatShouldIgnoreSourceVolume(void) {
     raop_runtime_set_log_enabled(NSStandardUserDefaults.diagnosticLog);
     
     static const double resyncWindows[] = { 0.1, 0.5, 1.0 };
-    static const uint32_t audioLatencies[] = { 11025, 44100, 88200 };
     
     raop_runtime_set_resync_window(resyncWindows[NSStandardUserDefaults.resyncLevel]);
-    raop_runtime_set_audio_latency(audioLatencies[NSStandardUserDefaults.latencyLevel]);
     
     [self updateWifiKeepAlive];
     [self updateWatchdog];
