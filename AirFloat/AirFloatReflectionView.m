@@ -48,6 +48,14 @@
     
 }
 
+- (void)setReflectionHidden:(BOOL)reflectionHidden {
+    
+    _reflectionHidden = reflectionHidden;
+    
+    ((CAReplicatorLayer *)self.layer).instanceCount = (reflectionHidden ? 1 : 2);
+    
+}
+
 - (void)setFrame:(CGRect)frame {
     
     [super setFrame:frame];
@@ -58,7 +66,7 @@
     
     CATransform3D transform = CATransform3DTranslate(CATransform3DMakeScale(1.0, -1.0, 1.0), 0.0, -frame.size.height, 0.0);
     
-    layer.instanceCount = 2;
+    layer.instanceCount = (self.reflectionHidden ? 1 : 2);
     layer.instanceTransform = transform;
     
     [UIView setAnimationsEnabled:YES];

@@ -32,4 +32,8 @@
 
 @interface AirFloatReflectionView : UIView
 
+// The mirrored copy also mirrors any content that overflows the view, so it is switched
+// off while an overlay (settings, support) is displayed.
+@property (nonatomic) BOOL reflectionHidden;
+
 @end

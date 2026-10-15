@@ -77,7 +77,7 @@ static int PanelViewControllerObserverContext;
         
         CGFloat height = [self heightOfContentInScrollView:scrollView];
         
-        scrollView.contentInset = UIEdgeInsetsMake((scrollView.frame.size.height - height) / 2.0,
+        scrollView.contentInset = UIEdgeInsetsMake(MAX(0.0, (scrollView.frame.size.height - height) / 2.0),
                                                    0, 0, 0);
         scrollView.contentSize = CGSizeMake(scrollView.bounds.size.width, height);
         

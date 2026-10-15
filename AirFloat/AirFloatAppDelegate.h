@@ -39,6 +39,11 @@
 @property (nonatomic, strong) AppViewController* appViewController;
 - (void)startRaopServer;
 - (void)updateRaopSeverSettings;
+- (void)applyRuntimeSettings;
+- (void)restartRaopServer;
+- (NSString*)statusDescription;
+- (void)clearLog;
+- (void)resetCounters;
 - (void)showNotification:(NSString*)messageTitle;
 
 @end

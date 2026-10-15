@@ -94,4 +94,76 @@
     
 }
 
+- (BOOL)keepWifiAwake {
+    
+    return [self boolForKey:@"keepWifiAwake"];
+    
+}
+
+- (void)setKeepWifiAwake:(BOOL)keepWifiAwake {
+    
+    [self setBool:keepWifiAwake forKey:@"keepWifiAwake"];
+    
+}
+
+- (BOOL)autoRestartServer {
+    
+    return [self boolForKey:@"autoRestartServer"];
+    
+}
+
+- (void)setAutoRestartServer:(BOOL)autoRestartServer {
+    
+    [self setBool:autoRestartServer forKey:@"autoRestartServer"];
+    
+}
+
+- (BOOL)bitPerfectMode {
+    
+    return [self boolForKey:@"bitPerfectMode"];
+    
+}
+
+- (void)setBitPerfectMode:(BOOL)bitPerfectMode {
+    
+    [self setBool:bitPerfectMode forKey:@"bitPerfectMode"];
+    
+}
+
+- (BOOL)diagnosticLog {
+    
+    return [self boolForKey:@"diagnosticLog"];
+    
+}
+
+- (void)setDiagnosticLog:(BOOL)diagnosticLog {
+    
+    [self setBool:diagnosticLog forKey:@"diagnosticLog"];
+    
+}
+
+- (NSInteger)latencyLevel {
+    
+    return MAX(0, MIN(2, [self integerForKey:@"latencyLevel"]));
+    
+}
+
+- (void)setLatencyLevel:(NSInteger)latencyLevel {
+    
+    [self setInteger:latencyLevel forKey:@"latencyLevel"];
+    
+}
+
+- (NSInteger)resyncLevel {
+    
+    return MAX(0, MIN(2, [self integerForKey:@"resyncLevel"]));
+    
+}
+
+- (void)setResyncLevel:(NSInteger)resyncLevel {
+    
+    [self setInteger:resyncLevel forKey:@"resyncLevel"];
+    
+}
+
 @end

@@ -39,6 +39,7 @@
 #import "AirFloatAdView.h"
 #import "SupportViewController.h"
 #import "SettingsViewController.h"
+#import "AirFloatReflectionView.h"
 #import "AppViewController.h"
 
 @interface AppViewController () {
@@ -139,7 +140,23 @@ void clientEndedRecording(raop_session_p raop_session, void* ctx) {
     AppViewController* viewController = (__bridge AppViewController*)ctx;
 
     if ([UIApplication sharedApplication].applicationState == UIApplicationStateBackground) {
-        backgroundTask = [[UIApplication sharedApplication] beginBackgroundTaskWithExpirationHandler:nil];
+        
+        // Give the app a short grace period to finish cleaning up. The task must always be
+        // ended: if it is left open iOS terminates the app after 180 seconds in the background.
+        UIApplication* application = [UIApplication sharedApplication];
+        __block UIBackgroundTaskIdentifier task = UIBackgroundTaskInvalid;
+        
+        void (^endTask)(void) = ^{
+            if (task != UIBackgroundTaskInvalid) {
+                [application endBackgroundTask:task];
+                task = UIBackgroundTaskInvalid;
+            }
+        };
+        
+        task = [application beginBackgroundTaskWithExpirationHandler:endTask];
+        
+        dispatch_after(dispatch_time(DISPATCH_TIME_NOW, 15 * NSEC_PER_SEC), dispatch_get_main_queue(), endTask);
+        
     }
 
     [viewController performSelectorOnMainThread:@selector(clientEndedRecording) withObject:nil waitUntilDone:NO];
@@ -357,6 +374,8 @@ void newServerSession(raop_server_p server, raop_session_p new_session, void* ct
     _overlaidViewController.view.frame = self.overlaidViewContainer.bounds;
     [self.overlaidViewContainer addSubview:viewController.view];
     
+    [self setReflectionHidden:YES];
+    
     [_overlaidViewController viewWillAppear:YES];
     
     [UIView animateWithDuration:0.3
@@ -376,6 +395,15 @@ void newServerSession(raop_server_p server, raop_session_p new_session, void* ct
                          [self->_overlaidViewController viewDidAppear:YES];
                          
                      }];
+    
+}
+
+- (void)setReflectionHidden:(BOOL)hidden {
+    
+    UIView* reflectionView = self.overlaidViewContainer.superview;
+    
+    if ([reflectionView isKindOfClass:[AirFloatReflectionView class]])
+        ((AirFloatReflectionView*)reflectionView).reflectionHidden = hidden;
     
 }
 
@@ -399,6 +427,8 @@ void newServerSession(raop_server_p server, raop_session_p new_session, void* ct
                          
                          while ([self.overlaidViewContainer.subviews count] > 0)
                              [[self.overlaidViewContainer.subviews lastObject] removeFromSuperview];
+                         
+                         [self setReflectionHidden:NO];
                          
                          [self->_overlaidViewController viewDidDisappear:YES];
                          
@@ -580,7 +610,8 @@ void newServerSession(raop_server_p server, raop_session_p new_session, void* ct
     NSLog(@"stopBackgroundTask called");
     UIBackgroundTaskIdentifier identifier = backgroundTask;
     backgroundTask = 0;
-    [[UIApplication sharedApplication] endBackgroundTask:identifier];
+    if (identifier != UIBackgroundTaskInvalid)
+        [[UIApplication sharedApplication] endBackgroundTask:identifier];
     
 }
 
