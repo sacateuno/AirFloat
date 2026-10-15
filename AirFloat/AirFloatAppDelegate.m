@@ -470,7 +470,7 @@ static bool AirFloatShouldIgnoreSourceVolume(void) {
     raop_runtime_reset_stats();
 }
 
-- (NSString*)statusDescription {
+- (NSDictionary*)statusSnapshot {
     
     NSString* ip = nil;
     struct sockaddr_in gateway;
@@ -482,30 +482,34 @@ static bool AirFloatShouldIgnoreSourceVolume(void) {
     struct raop_runtime_stats_t stats;
     raop_runtime_get_stats(&stats);
     
-    NSMutableArray* lines = [NSMutableArray array];
-    
-    if (running)
-        [lines addObject:[NSString stringWithFormat:@"Server   %@:%u", (hasNetwork ? ip : @"no network"), _serverPort]];
-    else
-        [lines addObject:@"Server   stopped"];
-    
     NSTimeInterval uptime = (running && _serverStartedAt != nil ? -[_serverStartedAt timeIntervalSinceNow] : 0);
-    [lines addObject:[NSString stringWithFormat:@"State    %@   up %02d:%02d:%02d   restarts %lu", (recording ? @"streaming" : @"idle"), (int)uptime / 3600, ((int)uptime / 60) % 60, (int)uptime % 60, (unsigned long)_restartCount]];
     
-    NSString* gatewayText = @"off";
-    if (_keepAliveActive) {
+    NSString* gatewayText = @"";
+    if (_keepAliveActive && hasNetwork) {
         char buffer[INET_ADDRSTRLEN] = "?";
-        if (hasNetwork)
-            inet_ntop(AF_INET, &gateway.sin_addr, buffer, sizeof(buffer));
-        gatewayText = [NSString stringWithFormat:@"on (%s)", buffer];
+        inet_ntop(AF_INET, &gateway.sin_addr, buffer, sizeof(buffer));
+        gatewayText = [NSString stringWithUTF8String:buffer];
     }
-    [lines addObject:[NSString stringWithFormat:@"Keep-alive %@", gatewayText]];
     
-    [lines addObject:[NSString stringWithFormat:@"Lost %u   resend asked %u / got %u", stats.packets_lost, stats.resends_requested, stats.resends_received]];
-    [lines addObject:[NSString stringWithFormat:@"Unrecovered %u   queue %u pk   delay %+.3f s", stats.unrecovered_packets, stats.queue_packets, stats.delay_seconds]];
-    [lines addObject:[NSString stringWithFormat:@"Log %@ (%ld KB)", (raop_runtime_log_enabled() ? @"on" : @"off"), raop_runtime_log_size() / 1024]];
-    
-    return [lines componentsJoinedByString:@"\n"];
+    return @{
+        @"running": @(running),
+        @"hasNetwork": @(hasNetwork),
+        @"address": (ip ?: @""),
+        @"port": @(_serverPort),
+        @"recording": @(recording),
+        @"uptime": @(uptime),
+        @"restarts": @(_restartCount),
+        @"keepAlive": @(_keepAliveActive),
+        @"gateway": gatewayText,
+        @"lost": @(stats.packets_lost),
+        @"asked": @(stats.resends_requested),
+        @"got": @(stats.resends_received),
+        @"unrecovered": @(stats.unrecovered_packets),
+        @"queue": @(stats.queue_packets),
+        @"delay": @(stats.delay_seconds),
+        @"logEnabled": @(raop_runtime_log_enabled()),
+        @"logKB": @(raop_runtime_log_size() / 1024)
+    };
     
 }
 

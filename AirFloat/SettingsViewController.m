@@ -36,6 +36,22 @@
 #import "AirFloatBarButton.h"
 #import "SettingsViewController.h"
 
+static UIColor* AirFloatHexColor(uint32_t hex) {
+    return [UIColor colorWithRed:((hex >> 16) & 0xFF) / 255.0 green:((hex >> 8) & 0xFF) / 255.0 blue:(hex & 0xFF) / 255.0 alpha:1.0];
+}
+
+// Status panel palette: dim and bright phosphor greens, with amber and red kept for warnings.
+#define StatusPanelBackground 0x040A06
+#define StatusPanelBorder     0x1F5A36
+#define StatusLabelColor      0x3C8F5A
+#define StatusValueColor      0x3DDC7A
+#define StatusHighlightColor  0x8CFFB8
+#define StatusSeparatorColor  0x2F6B47
+#define StatusAddressColor    0x56D4E0
+#define StatusWarningColor    0xFFB000
+#define StatusErrorColor      0xFF5A4F
+#define StatusGlowColor       0x39FF7A
+
 NSString *const SettingsUpdatedNotification = @"SettingsUpdatedNotification";
 
 @interface SettingsViewController () <UITextFieldDelegate, UIScrollViewDelegate>
@@ -330,17 +346,74 @@ NSString *const SettingsUpdatedNotification = @"SettingsUpdatedNotification";
     
 }
 
+- (AirFloatBarButton*)addButtonTitled:(NSString*)title action:(SEL)action frame:(CGRect)frame inContainer:(UIView*)container {
+    
+    AirFloatBarButton* button = [[AirFloatBarButton alloc] initWithFrame:frame];
+    [button setTitle:title forState:UIControlStateNormal];
+    button.titleLabel.font = [UIFont boldSystemFontOfSize:12];
+    [button setTitleColor:[UIColor whiteColor] forState:UIControlStateNormal];
+    [button addTarget:self action:action forControlEvents:UIControlEventTouchUpInside];
+    [container addSubview:button];
+    
+    return button;
+    
+}
+
 - (void)buildExtendedSettings {
     
     UIView* container = self.keepScreenLitSwitch.superview;
     if (container == nil)
         return;
     
+    static const CGFloat statusLineHeight = 17.0;
+    static const NSInteger statusLines = 7;
+    static const CGFloat topMargin = 14.0;
+    static const CGFloat buttonHeight = 28.0;
+    CGFloat statusPanelHeight = 36 + statusLines * statusLineHeight + 12;
+    CGFloat topBlockHeight = topMargin + statusPanelHeight + 10 + buttonHeight + 22;
+    
+    // The live status is the first thing shown, so the existing rows move down to make room.
+    for (UIView* subview in container.subviews) {
+        CGRect subviewFrame = subview.frame;
+        subviewFrame.origin.y += topBlockHeight;
+        subview.frame = subviewFrame;
+    }
+    
     CGFloat y = 0;
     for (UIView* subview in container.subviews)
         y = MAX(y, CGRectGetMaxY(subview.frame));
     y += 22;
     
+    // Live status at the top
+    UIView* statusPanel = [[UIView alloc] initWithFrame:CGRectMake(12, topMargin, 300, statusPanelHeight)];
+    statusPanel.backgroundColor = [AirFloatHexColor(StatusPanelBackground) colorWithAlphaComponent:0.94];
+    statusPanel.layer.cornerRadius = 7.0;
+    statusPanel.layer.borderWidth = 1.0;
+    statusPanel.layer.borderColor = AirFloatHexColor(StatusPanelBorder).CGColor;
+    [container addSubview:statusPanel];
+    
+    UILabel* promptLabel = [[UILabel alloc] initWithFrame:CGRectMake(12, 9, 276, 16)];
+    promptLabel.backgroundColor = [UIColor clearColor];
+    promptLabel.attributedText = [self attributedPrompt];
+    [self addGlowToLabel:promptLabel];
+    [statusPanel addSubview:promptLabel];
+    
+    UIView* rule = [[UIView alloc] initWithFrame:CGRectMake(12, 29, 276, 1)];
+    rule.backgroundColor = [AirFloatHexColor(StatusPanelBorder) colorWithAlphaComponent:0.8];
+    [statusPanel addSubview:rule];
+    
+    self.statusLabel = [[UILabel alloc] initWithFrame:CGRectMake(12, 36, 276, statusLines * statusLineHeight)];
+    self.statusLabel.backgroundColor = [UIColor clearColor];
+    self.statusLabel.numberOfLines = 0;
+    self.statusLabel.lineBreakMode = NSLineBreakByClipping;
+    [self addGlowToLabel:self.statusLabel];
+    [statusPanel addSubview:self.statusLabel];
+    
+    CGFloat buttonsY = topMargin + statusPanelHeight + 10;
+    [self addButtonTitled:@"Reset counters" action:@selector(resetCountersTouchedUpInside:) frame:CGRectMake(12, buttonsY, 142, buttonHeight) inContainer:container];
+    [self addButtonTitled:@"Clear log" action:@selector(clearLogTouchedUpInside:) frame:CGRectMake(170, buttonsY, 142, buttonHeight) inContainer:container];
+    
+    // Settings below the existing ones
     CGFloat groupY = [self addGroupTitled:@"RELIABILITY" rows:2 atY:y inContainer:container];
     self.wifiAwakeSwitch = [self addSwitchRow:@"Keep Wi-Fi awake" index:0 groupY:groupY inContainer:container];
     self.autoRestartSwitch = [self addSwitchRow:@"Auto-restart server" index:1 groupY:groupY inContainer:container];
@@ -353,29 +426,7 @@ NSString *const SettingsUpdatedNotification = @"SettingsUpdatedNotification";
     
     groupY = [self addGroupTitled:@"DIAGNOSTICS" rows:1 atY:y inContainer:container];
     self.diagnosticLogSwitch = [self addSwitchRow:@"Save log" index:0 groupY:groupY inContainer:container];
-    y = groupY + 18 + 32 + 10;
-    
-    AirFloatBarButton* clearButton = [[AirFloatBarButton alloc] initWithFrame:CGRectMake(12, y, 142, 28)];
-    [clearButton setTitle:@"Clear log" forState:UIControlStateNormal];
-    clearButton.titleLabel.font = [UIFont boldSystemFontOfSize:12];
-    [clearButton setTitleColor:[UIColor whiteColor] forState:UIControlStateNormal];
-    [clearButton addTarget:self action:@selector(clearLogTouchedUpInside:) forControlEvents:UIControlEventTouchUpInside];
-    [container addSubview:clearButton];
-    
-    AirFloatBarButton* resetButton = [[AirFloatBarButton alloc] initWithFrame:CGRectMake(170, y, 142, 28)];
-    [resetButton setTitle:@"Reset counters" forState:UIControlStateNormal];
-    resetButton.titleLabel.font = [UIFont boldSystemFontOfSize:12];
-    [resetButton setTitleColor:[UIColor whiteColor] forState:UIControlStateNormal];
-    [resetButton addTarget:self action:@selector(resetCountersTouchedUpInside:) forControlEvents:UIControlEventTouchUpInside];
-    [container addSubview:resetButton];
-    y += 28 + 12;
-    
-    self.statusLabel = [self labelWithText:@"" frame:CGRectMake(14, y, 296, 104) header:NO];
-    self.statusLabel.numberOfLines = 0;
-    self.statusLabel.font = [UIFont fontWithName:@"Courier" size:11];
-    self.statusLabel.lineBreakMode = NSLineBreakByWordWrapping;
-    [container addSubview:self.statusLabel];
-    y += 104 + 24;
+    y = groupY + 18 + 32 + 24;
     
     CGRect frame = container.frame;
     frame.size.height = y;
@@ -429,7 +480,158 @@ NSString *const SettingsUpdatedNotification = @"SettingsUpdatedNotification";
 
 - (void)refreshStatus {
     
-    self.statusLabel.text = [AirFloatSharedAppDelegate statusDescription];
+    self.statusLabel.attributedText = [self attributedStatusForSnapshot:[AirFloatSharedAppDelegate statusSnapshot]];
+    
+}
+
+#pragma mark - Status panel appearance
+
+- (void)addGlowToLabel:(UILabel*)label {
+    
+    label.layer.shadowColor = AirFloatHexColor(StatusGlowColor).CGColor;
+    label.layer.shadowOpacity = 0.45f;
+    label.layer.shadowRadius = 2.0f;
+    label.layer.shadowOffset = CGSizeZero;
+    
+}
+
+- (NSDictionary*)statusAttributesWithColor:(UIColor*)color bold:(BOOL)bold {
+    
+    static NSParagraphStyle* paragraphStyle;
+    static dispatch_once_t onceToken;
+    dispatch_once(&onceToken, ^{
+        NSMutableParagraphStyle* style = [[NSMutableParagraphStyle alloc] init];
+        style.minimumLineHeight = 17.0;
+        style.maximumLineHeight = 17.0;
+        style.lineBreakMode = NSLineBreakByClipping;
+        paragraphStyle = style;
+    });
+    
+    UIFont* font = [UIFont fontWithName:(bold ? @"Courier-Bold" : @"Courier") size:11.5];
+    
+    return @{ NSFontAttributeName: font, NSForegroundColorAttributeName: color, NSParagraphStyleAttributeName: paragraphStyle };
+    
+}
+
+- (NSAttributedString*)attributedPrompt {
+    
+    NSMutableAttributedString* text = [[NSMutableAttributedString alloc] init];
+    
+    void (^add)(NSString*, uint32_t, BOOL) = ^(NSString* string, uint32_t color, BOOL bold) {
+        [text appendAttributedString:[[NSAttributedString alloc] initWithString:string attributes:[self statusAttributesWithColor:AirFloatHexColor(color) bold:bold]]];
+    };
+    
+    add(@"airfloat@ipad", StatusValueColor, YES);
+    add(@":~$ ", StatusLabelColor, NO);
+    add(@"status ", StatusHighlightColor, NO);
+    add(@"\u258C", StatusHighlightColor, NO);
+    
+    return text;
+    
+}
+
+- (NSAttributedString*)attributedStatusForSnapshot:(NSDictionary*)snapshot {
+    
+    NSMutableAttributedString* text = [[NSMutableAttributedString alloc] init];
+    
+    void (^add)(NSString*, uint32_t, BOOL) = ^(NSString* string, uint32_t color, BOOL bold) {
+        [text appendAttributedString:[[NSAttributedString alloc] initWithString:string attributes:[self statusAttributesWithColor:AirFloatHexColor(color) bold:bold]]];
+    };
+    
+    BOOL running = [snapshot[@"running"] boolValue];
+    BOOL hasNetwork = [snapshot[@"hasNetwork"] boolValue];
+    BOOL recording = [snapshot[@"recording"] boolValue];
+    BOOL keepAlive = [snapshot[@"keepAlive"] boolValue];
+    BOOL logEnabled = [snapshot[@"logEnabled"] boolValue];
+    NSUInteger lost = [snapshot[@"lost"] unsignedIntegerValue];
+    NSUInteger asked = [snapshot[@"asked"] unsignedIntegerValue];
+    NSUInteger got = [snapshot[@"got"] unsignedIntegerValue];
+    NSUInteger unrecovered = [snapshot[@"unrecovered"] unsignedIntegerValue];
+    NSUInteger restarts = [snapshot[@"restarts"] unsignedIntegerValue];
+    double delay = [snapshot[@"delay"] doubleValue];
+    int uptime = (int)[snapshot[@"uptime"] doubleValue];
+    
+    // Server
+    add(@"SRV   ", StatusLabelColor, NO);
+    if (!running) {
+        add(@"\u25CF ", StatusErrorColor, NO);
+        add(@"STOPPED", StatusErrorColor, YES);
+    } else if (!hasNetwork) {
+        add(@"\u25CF ", StatusWarningColor, NO);
+        add(@"NO NETWORK", StatusWarningColor, YES);
+    } else {
+        add(@"\u25CF ", StatusValueColor, NO);
+        add([NSString stringWithFormat:@"%@:%u", snapshot[@"address"], [snapshot[@"port"] unsignedIntValue]], StatusAddressColor, NO);
+    }
+    add(@"\n", StatusValueColor, NO);
+    
+    // State
+    add(@"STATE ", StatusLabelColor, NO);
+    if (recording) {
+        add(@"\u25CF ", StatusHighlightColor, NO);
+        add(@"STREAMING", StatusHighlightColor, YES);
+    } else {
+        add(@"\u25CF ", StatusSeparatorColor, NO);
+        add(@"IDLE", StatusValueColor, NO);
+    }
+    add(@"  up ", StatusLabelColor, NO);
+    add([NSString stringWithFormat:@"%02d:%02d:%02d", uptime / 3600, (uptime / 60) % 60, uptime % 60], StatusValueColor, NO);
+    add(@"\n", StatusValueColor, NO);
+    
+    // Network keep-alive
+    add(@"NET   ", StatusLabelColor, NO);
+    add(@"keep-alive ", StatusLabelColor, NO);
+    if (keepAlive) {
+        add(@"ON", StatusValueColor, YES);
+        if ([snapshot[@"gateway"] length] > 0) {
+            add(@" \u2192 ", StatusSeparatorColor, NO);
+            add(snapshot[@"gateway"], StatusAddressColor, NO);
+        }
+    } else
+        add(@"OFF", StatusWarningColor, YES);
+    add(@"\n", StatusValueColor, NO);
+    
+    // Lost packets and their recovery
+    add(@"LOSS  ", StatusLabelColor, NO);
+    add(@"lost ", StatusLabelColor, NO);
+    add([NSString stringWithFormat:@"%lu", (unsigned long)lost], (lost > 0 ? StatusWarningColor : StatusValueColor), NO);
+    add(@" \u00B7 ", StatusSeparatorColor, NO);
+    add(@"ask ", StatusLabelColor, NO);
+    add([NSString stringWithFormat:@"%lu", (unsigned long)asked], StatusValueColor, NO);
+    add(@" \u00B7 ", StatusSeparatorColor, NO);
+    add(@"got ", StatusLabelColor, NO);
+    add([NSString stringWithFormat:@"%lu", (unsigned long)got], (got >= asked ? StatusValueColor : StatusWarningColor), NO);
+    add(@"\n", StatusValueColor, NO);
+    
+    // Queue and clock
+    uint32_t delayColor = (fabs(delay) < 0.1 ? StatusValueColor : (fabs(delay) < 0.3 ? StatusWarningColor : StatusErrorColor));
+    add(@"SYNC  ", StatusLabelColor, NO);
+    add(@"queue ", StatusLabelColor, NO);
+    add([NSString stringWithFormat:@"%u", [snapshot[@"queue"] unsignedIntValue]], StatusValueColor, NO);
+    add(@" pk", StatusLabelColor, NO);
+    add(@" \u00B7 ", StatusSeparatorColor, NO);
+    add(@"delay ", StatusLabelColor, NO);
+    add([NSString stringWithFormat:@"%+.3f s", delay], delayColor, NO);
+    add(@"\n", StatusValueColor, NO);
+    
+    // Failures
+    add(@"FAIL  ", StatusLabelColor, NO);
+    add(@"unrecovered ", StatusLabelColor, NO);
+    add([NSString stringWithFormat:@"%lu", (unsigned long)unrecovered], (unrecovered > 0 ? StatusErrorColor : StatusValueColor), unrecovered > 0);
+    add(@" \u00B7 ", StatusSeparatorColor, NO);
+    add(@"restarts ", StatusLabelColor, NO);
+    add([NSString stringWithFormat:@"%lu", (unsigned long)restarts], (restarts > 0 ? StatusWarningColor : StatusValueColor), NO);
+    add(@"\n", StatusValueColor, NO);
+    
+    // Log
+    add(@"LOG   ", StatusLabelColor, NO);
+    if (logEnabled) {
+        add(@"ON", StatusWarningColor, YES);
+        add([NSString stringWithFormat:@" \u00B7 %ld KB", (long)[snapshot[@"logKB"] longValue]], StatusLabelColor, NO);
+    } else
+        add(@"OFF", StatusSeparatorColor, NO);
+    
+    return text;
     
 }
 

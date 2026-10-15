@@ -41,7 +41,7 @@
 - (void)updateRaopSeverSettings;
 - (void)applyRuntimeSettings;
 - (void)restartRaopServer;
-- (NSString*)statusDescription;
+- (NSDictionary*)statusSnapshot;
 - (void)clearLog;
 - (void)resetCounters;
 - (void)showNotification:(NSString*)messageTitle;
