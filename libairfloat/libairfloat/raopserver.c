@@ -192,7 +192,21 @@ void raop_server_set_settings(struct raop_server_t* rs, struct raop_server_setti
     
     settings_set_name(rs->settings, settings.name);
     settings_set_password(rs->settings, settings.password);
+    bool was_ignoring_volume = settings_get_ignore_source_volume(rs->settings);
+    
     settings_set_ignore_source_volume(rs->settings, settings.ignore_source_volume);
+    
+    // A volume the sender set earlier would otherwise stay applied.
+    if (settings.ignore_source_volume && !was_ignoring_volume) {
+        
+        mutex_lock(rs->mutex);
+        uint32_t count = rs->sessions_count;
+        mutex_unlock(rs->mutex);
+        
+        for (uint32_t i = 0 ; i < count && i < rs->sessions_count ; i++)
+            raop_session_reset_volume(rs->sessions[i]);
+        
+    }
     
     const char* new_name = settings_get_name(rs->settings);
     

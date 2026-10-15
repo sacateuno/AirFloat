@@ -61,6 +61,7 @@ void raop_session_set_client_updated_volume_callback(raop_session_p rs, raop_ses
 void raop_session_set_client_ended_recording_callback(raop_session_p rs, raop_session_client_ended_recording_callback callback, void* ctx);
 void raop_session_set_ended_callback(raop_session_p rs, raop_session_ended_callback callback, void* ctx);
 bool raop_session_is_recording(raop_session_p rs);
+void raop_session_reset_volume(raop_session_p rs);
 dacp_client_p raop_session_get_dacp_client(raop_session_p rs);
 
 #endif

@@ -80,7 +80,6 @@ struct raop_session_t {
     bool is_running;
     raop_server_p server;
     char* password;
-    bool ignore_source_volume;
     web_server_connection_p raop_connection;
     char authentication_digest_nonce[33];
     dacp_client_p dacp_client;
@@ -508,7 +507,8 @@ void _raop_session_raop_connection_request_callback(web_server_connection_p conn
                     const char* progress;
                     if ((volume = parameters_value_for_key(parameters, "volume"))) {
                         
-                        if (!rs->ignore_source_volume) {
+                        // Read when the volume arrives, so switching the setting applies to a running session.
+                        if (!raop_server_get_settings(rs->server).ignore_source_volume) {
                             
                             //The volume is a float value representing the audio attenuation in dB
                             //A value of –144 means the audio is muted. Then it goes from –30 to 0.
@@ -738,8 +738,6 @@ struct raop_session_t* raop_session_create(raop_server_p server, web_server_conn
         strcpy(rs->password, password);
     }
     
-    rs->ignore_source_volume = settings_get_ignore_source_volume(settings);
-    
     web_server_connection_set_request_callback(rs->raop_connection, _raop_session_raop_connection_request_callback, rs);
     web_server_connection_set_closed_callback(rs->raop_connection, _raop_session_raop_closed_callback, rs);
     
@@ -868,6 +866,17 @@ void raop_session_set_ended_callback(struct raop_session_t* rs, raop_session_end
     
     rs->callbacks.ended = callback;
     rs->callbacks.ctx.ended = ctx;
+    
+}
+
+void raop_session_reset_volume(struct raop_session_t* rs) {
+    
+    mutex_lock(rs->mutex);
+    
+    if (rs->rtp_session != NULL)
+        audio_output_set_volume(audio_queue_get_output(rs->rtp_session->queue), 1.0);
+    
+    mutex_unlock(rs->mutex);
     
 }
 
