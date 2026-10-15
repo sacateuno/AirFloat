@@ -32,10 +32,18 @@
 #define _log_h
 
 #include <stdint.h>
+#include <stdbool.h>
+#include <stddef.h>
 
 #define LOG_INFO          0
 #define LOG_COMMUNICATION 1
 #define LOG_ERROR         2
+
+void log_set_enabled(bool enabled);
+bool log_is_enabled(void);
+void log_set_file_path(const char* path);
+void log_clear(void);
+long log_file_size(void);
 
 void log_message(int level, const char* message, ...);
 void log_data(int level, const void* data, size_t data_size);

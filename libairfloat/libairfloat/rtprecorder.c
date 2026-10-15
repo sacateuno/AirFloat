@@ -254,6 +254,8 @@ void _rtp_recorder_send_resend_request(struct rtp_recorder_t* rr, uint16_t seq_n
     
     rtp_socket_send_to(rr->control_socket, rr->remote_control_endpoint, &pckt, RTP_RESEND_PACKET_SIZE);
     
+    audio_queue_stats_add_requested(count);
+    
     log_message(LOG_INFO, "Requested packet resend (seq: %d / count %d)", seq_num, count);
     
 }
@@ -276,8 +278,10 @@ void _rtp_recorder_process_audio_packet(struct rtp_recorder_t* rr, struct rtp_pa
         memcpy(decoded_audio_data, packet_audio_data, len);
     
     uint16_t missing_count = audio_queue_add_packet(rr->audio_queue, decoded_audio_data, len, c_seq, rtp_time);
-    if (missing_count > 0)
+    if (missing_count > 0) {
+        audio_queue_stats_add_lost(missing_count);
         _rtp_recorder_send_resend_request(rr, c_seq - missing_count, missing_count);
+    }
     
     free(decoded_audio_data);
     
@@ -337,6 +341,7 @@ size_t _rtp_recorder_socket_data_received_airtunes_v2(struct rtp_recorder_t* rr,
             // A resent packet is the original RTP packet wrapped in a 4 byte header.
             if (size > 4 + 12) {
                 struct rtp_packet_t resent_packet = _rtp_header_read(&((char*)buffer)[4], size - 4);
+                audio_queue_stats_add_received(1);
                 log_message(LOG_INFO, "Received missing packet %d", resent_packet.seq_num);
                 if (resent_packet.packet_data_size > 8)
                     _rtp_recorder_process_audio_packet(rr, &resent_packet);

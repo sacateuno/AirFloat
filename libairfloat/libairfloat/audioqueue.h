@@ -47,6 +47,23 @@ struct audio_queue_missing_packet_window {
     uint16_t packet_count;
 };
 
+struct audio_queue_stats_t {
+    uint32_t packets_lost;          /* gaps detected in the incoming stream */
+    uint32_t resends_requested;     /* packets asked to be resent */
+    uint32_t resends_received;      /* resent packets that arrived */
+    uint32_t unrecovered_packets;   /* lost packets that reached the playhead (played as silence) */
+    uint32_t queue_packets;         /* packets currently queued */
+    double delay_seconds;           /* last measured output delay against the stream */
+};
+
+void audio_queue_set_resync_window(double seconds);
+double audio_queue_get_resync_window(void);
+void audio_queue_get_stats(struct audio_queue_stats_t* stats);
+void audio_queue_reset_stats(void);
+void audio_queue_stats_add_lost(uint32_t count);
+void audio_queue_stats_add_requested(uint32_t count);
+void audio_queue_stats_add_received(uint32_t count);
+
 audio_queue_p audio_queue_create(decoder_p decoder);
 void audio_queue_set_received_audio_callback(audio_queue_p aq, audio_queue_received_audio_callback callback, void* ctx);
 void audio_queue_disable_synchronization(audio_queue_p aq);

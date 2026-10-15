@@ -62,4 +62,27 @@ void raop_server_stop(raop_server_p rs);
 void raop_server_set_new_session_callback(raop_server_p rs, raop_server_new_session_callback new_session_callback, void* ctx);
 void raop_server_set_session_accept_callback(raop_server_p rs, raop_server_accept_callback session_accept_callback, void* ctx);
 
+/* Runtime configuration and diagnostics (process wide) */
+
+struct raop_runtime_stats_t {
+    uint32_t packets_lost;
+    uint32_t resends_requested;
+    uint32_t resends_received;
+    uint32_t unrecovered_packets;
+    uint32_t queue_packets;
+    double delay_seconds;
+};
+
+void raop_runtime_log_message(const char* message);
+void raop_runtime_set_log_enabled(bool enabled);
+bool raop_runtime_log_enabled(void);
+void raop_runtime_set_log_path(const char* path);
+void raop_runtime_clear_log(void);
+long raop_runtime_log_size(void);
+void raop_runtime_set_resync_window(double seconds);
+void raop_runtime_set_audio_latency(uint32_t frames);
+uint32_t raop_runtime_get_audio_latency(void);
+void raop_runtime_get_stats(struct raop_runtime_stats_t* stats);
+void raop_runtime_reset_stats(void);
+
 #endif

@@ -39,6 +39,7 @@
 #include "settings.h"
 #include "webserver.h"
 #include "raopsession.h"
+#include "audioqueue.h"
 #include "raopserver.h"
 
 struct raop_server_t {
@@ -264,4 +265,63 @@ void raop_server_session_ended(struct raop_server_t* rs, raop_session_p session)
     mutex_unlock(rs->mutex);
     
     
+}
+
+
+#pragma mark - Runtime configuration and diagnostics
+
+static volatile uint32_t _raop_runtime_audio_latency = 11025;
+
+void raop_runtime_log_message(const char* message) {
+    log_message(LOG_INFO, "%s", message != NULL ? message : "");
+}
+
+void raop_runtime_set_log_enabled(bool enabled) {
+    log_set_enabled(enabled);
+}
+
+bool raop_runtime_log_enabled(void) {
+    return log_is_enabled();
+}
+
+void raop_runtime_set_log_path(const char* path) {
+    log_set_file_path(path);
+}
+
+void raop_runtime_clear_log(void) {
+    log_clear();
+}
+
+long raop_runtime_log_size(void) {
+    return log_file_size();
+}
+
+void raop_runtime_set_resync_window(double seconds) {
+    audio_queue_set_resync_window(seconds);
+}
+
+void raop_runtime_set_audio_latency(uint32_t frames) {
+    if (frames >= 4410 && frames <= 441000)
+        _raop_runtime_audio_latency = frames;
+}
+
+uint32_t raop_runtime_get_audio_latency(void) {
+    return _raop_runtime_audio_latency;
+}
+
+void raop_runtime_get_stats(struct raop_runtime_stats_t* stats) {
+    if (stats == NULL)
+        return;
+    struct audio_queue_stats_t aq_stats;
+    audio_queue_get_stats(&aq_stats);
+    stats->packets_lost = aq_stats.packets_lost;
+    stats->resends_requested = aq_stats.resends_requested;
+    stats->resends_received = aq_stats.resends_received;
+    stats->unrecovered_packets = aq_stats.unrecovered_packets;
+    stats->queue_packets = aq_stats.queue_packets;
+    stats->delay_seconds = aq_stats.delay_seconds;
+}
+
+void raop_runtime_reset_stats(void) {
+    audio_queue_reset_stats();
 }

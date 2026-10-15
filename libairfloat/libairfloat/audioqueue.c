@@ -79,6 +79,7 @@ struct audio_packet_t {
     struct audio_packet_t* previous;
     void* buffer;
     size_t buffer_size;
+    bool reported_lost;
     mutex_p mutex;
 };
 
@@ -193,7 +194,41 @@ struct audio_queue_t {
     mutex_p mutex;
     condition_p condition;
     bool destroyed;
+    double last_render_host_time;
 };
+
+static volatile double _audio_queue_resync_window = 0.5;
+static struct audio_queue_stats_t _audio_queue_stats;
+
+void audio_queue_set_resync_window(double seconds) {
+    if (seconds >= 0.05 && seconds <= 5.0)
+        _audio_queue_resync_window = seconds;
+}
+
+double audio_queue_get_resync_window(void) {
+    return _audio_queue_resync_window;
+}
+
+void audio_queue_get_stats(struct audio_queue_stats_t* stats) {
+    if (stats != NULL)
+        *stats = _audio_queue_stats;
+}
+
+void audio_queue_reset_stats(void) {
+    memset(&_audio_queue_stats, 0, sizeof(_audio_queue_stats));
+}
+
+void audio_queue_stats_add_lost(uint32_t count) {
+    __sync_fetch_and_add(&_audio_queue_stats.packets_lost, count);
+}
+
+void audio_queue_stats_add_requested(uint32_t count) {
+    __sync_fetch_and_add(&_audio_queue_stats.resends_requested, count);
+}
+
+void audio_queue_stats_add_received(uint32_t count) {
+    __sync_fetch_and_add(&_audio_queue_stats.resends_received, count);
+}
 
 void _audio_queue_add_packet_to_tail(struct audio_queue_t* aq, struct audio_packet_t* packet);
 struct audio_packet_t* _audio_queue_add_empty_packet(struct audio_queue_t* aq);
@@ -378,6 +413,12 @@ void _audio_queue_get_audio_buffer(struct audio_queue_t* aq, void* buffer, size_
                     aq->output_homed_at_host_time = hardware_get_time() + 1.0;
                 }
                 
+                if (audio_packet->state != audio_packet_state_complete && !audio_packet->reported_lost) {
+                    audio_packet->reported_lost = true;
+                    _audio_queue_stats.unrecovered_packets++;
+                    log_message(LOG_INFO, "Unrecovered packet %d reached the playhead (played as silence)", audio_packet->seq_no);
+                }
+                
                 size_t written = audio_packet_get_buffer(audio_packet, buf_write_head, buf_write_size);
                 
                 aq->frame_count -= written / aq->output_format.frame_size;
@@ -410,6 +451,9 @@ void _audio_queue_get_audio_buffer(struct audio_queue_t* aq, void* buffer, size_
         
     }
     
+    if (out_size < size)
+        log_message(LOG_INFO, "Underrun: filled %u of %u bytes (queue %u packets)", (unsigned)out_size, (unsigned)size, aq->queue_count);
+    
     if (aq->queue_count == 0)
         aq->last_known_sample = aq->last_known_sample_time = 0;
     
@@ -419,7 +463,20 @@ void _audio_queue_output_render(audio_output_p ao, void* buffer, size_t size, do
     
     struct audio_queue_t* aq = (struct audio_queue_t*)ctx;
     
+    double render_entered_at = hardware_get_time();
+    
     mutex_lock(aq->mutex);
+    
+    double mutex_acquired_at = hardware_get_time();
+    if (mutex_acquired_at - render_entered_at > 0.010)
+        log_message(LOG_INFO, "Render: waited %1.1f ms for the queue mutex", (mutex_acquired_at - render_entered_at) * 1000.0);
+    
+    {
+        double expected_gap = ((double)(size / aq->output_format.frame_size)) / (double)aq->output_format.sample_rate;
+        if (aq->last_render_host_time > 0 && host_time - aq->last_render_host_time > expected_gap * 1.5)
+            log_message(LOG_INFO, "Render: gap of %1.1f ms between callbacks (expected %1.1f ms)", (host_time - aq->last_render_host_time) * 1000.0, expected_gap * 1000.0);
+        aq->last_render_host_time = host_time;
+    }
     
     if (_audio_queue_has_available_packet(aq)) {
         
@@ -471,11 +528,13 @@ void _audio_queue_output_render(audio_output_p ao, void* buffer, size_t size, do
                 
                 delay = queue_time - render_start_time;
                 
-                if (delay >= -0.1 && delay <= 0.1) {
+                if (delay >= -_audio_queue_resync_window && delay <= _audio_queue_resync_window) {
                     
                     if (aq->output_homed_at_host_time <= host_time)
                         audio_output_set_muted(aq->output, false);
-                    audio_output_set_playback_rate(aq->output, MAX(MIN(1.0 - delay, 1.002), 0.998));
+                    
+                    // No resampling and no sample slip: the stream is played untouched while the
+                    // measured delay stays inside the tolerance window. Outside it we resynchronize.
                     _audio_queue_get_audio_buffer(aq, &((char*)buffer)[data_offset], size - data_offset);
                     
                 } else {
@@ -483,9 +542,12 @@ void _audio_queue_output_render(audio_output_p ao, void* buffer, size_t size, do
                     aq->output_is_homed = false;
                     aq->output_homed_at_host_time = host_time + 1.0;
                     audio_output_set_muted(aq->output, true);
-                    log_message(LOG_INFO, "Resynchronizing output");
+                    log_message(LOG_INFO, "Resynchronizing output (delay %1.4f)", delay);
                     
                 }
+                
+                _audio_queue_stats.queue_packets = aq->queue_count;
+                _audio_queue_stats.delay_seconds = delay;
                 
                 if (aq->queue_head && aq->queue_head->seq_no % 100 == 0)
                     log_message(LOG_INFO, "%d packages in queue (%d missing / seq %d / delay %1.3f / playback rate %1.3f)", aq->queue_count, aq->missing_count, aq->queue_head->seq_no, delay, audio_output_get_playback_rate(aq->output));
@@ -500,6 +562,10 @@ void _audio_queue_output_render(audio_output_p ao, void* buffer, size_t size, do
     }
     
     mutex_unlock(aq->mutex);
+    
+    double render_done_at = hardware_get_time();
+    if (render_done_at - render_entered_at > 0.020)
+        log_message(LOG_INFO, "Render: callback took %1.1f ms", (render_done_at - render_entered_at) * 1000.0);
     
 }
 

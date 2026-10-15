@@ -44,6 +44,28 @@
 
 #define ca_assert(error) assert((error) == noErr)
 
+static void _log_asbd(const char* label, const AudioStreamBasicDescription* d) {
+    UInt32 id = d->mFormatID;
+    log_message(LOG_INFO, "[fmt] %s: %.0f Hz, %u ch, %u bit, %u bytes/frame, id=%c%c%c%c, flags=0x%x%s%s%s",
+                label, d->mSampleRate, (unsigned)d->mChannelsPerFrame, (unsigned)d->mBitsPerChannel, (unsigned)d->mBytesPerFrame,
+                (char)((id >> 24) & 0xFF), (char)((id >> 16) & 0xFF), (char)((id >> 8) & 0xFF), (char)(id & 0xFF),
+                (unsigned)d->mFormatFlags,
+                (d->mFormatFlags & kAudioFormatFlagIsFloat) ? " [float]" : "",
+                (d->mFormatFlags & kAudioFormatFlagIsSignedInteger) ? " [signed int]" : "",
+                (d->mFormatFlags & kAudioFormatFlagIsNonInterleaved) ? " [non-interleaved]" : "");
+}
+
+static void _log_unit_formats(const char* name, AudioUnit unit) {
+    AudioStreamBasicDescription d;
+    UInt32 size = sizeof(d);
+    char label[96];
+    snprintf(label, sizeof(label), "%s input", name);
+    if (AudioUnitGetProperty(unit, kAudioUnitProperty_StreamFormat, kAudioUnitScope_Input, 0, &d, &size) == noErr) _log_asbd(label, &d);
+    size = sizeof(d);
+    snprintf(label, sizeof(label), "%s output", name);
+    if (AudioUnitGetProperty(unit, kAudioUnitProperty_StreamFormat, kAudioUnitScope_Output, 0, &d, &size) == noErr) _log_asbd(label, &d);
+}
+
 double hardware_host_time_to_seconds(double host_time);
 
 typedef void (*audio_output_callback)(audio_output_p ao, void* buffer, size_t size, double host_time, void* ctx);
@@ -94,6 +116,9 @@ void _audio_output_connect_unit(struct audio_output_t* ao, AUNode output_node, U
         size = sizeof(AudioStreamBasicDescription);
         ca_assert(AudioUnitGetProperty(input_unit, kAudioUnitProperty_StreamFormat, kAudioUnitScope_Input, input_node_bus, &in_desc, &size));
         
+        log_message(LOG_INFO, "[fmt] connect: formats differ, inserting AUConverter");
+        _log_asbd("connect: upstream output", &out_desc);
+        _log_asbd("connect: downstream input", &in_desc);
         AUNode converter_node;
         AudioUnit converter_unit = _audio_output_create_add_unit(ao, kAudioUnitType_FormatConverter, kAudioUnitSubType_AUConverter, kAudioUnitManufacturer_Apple, &converter_node);
         ca_assert(AudioUnitSetProperty(converter_unit, kAudioUnitProperty_StreamFormat, kAudioUnitScope_Input, 0, &out_desc, sizeof(AudioStreamBasicDescription)));
@@ -101,8 +126,11 @@ void _audio_output_connect_unit(struct audio_output_t* ao, AUNode output_node, U
         ca_assert(AUGraphConnectNodeInput(ao->graph, output_node, output_node_bus, converter_node, 0));
         ca_assert(AUGraphConnectNodeInput(ao->graph, converter_node, 0, input_node, input_node_bus));
         
-    } else
+    } else {
+        log_message(LOG_INFO, "[fmt] connect: direct connection, no converter");
+        _log_asbd("connect: shared format", &out_desc);
         ca_assert(AUGraphConnectNodeInput(ao->graph, output_node, output_node_bus, input_node, input_node_bus));
+    }
     
 }
 
@@ -125,6 +153,8 @@ struct audio_output_t* audio_output_create(struct decoder_output_format_t decode
     
     struct audio_output_t* ao = (struct audio_output_t*)malloc(sizeof(struct audio_output_t));
     bzero(ao, sizeof(struct audio_output_t));
+    
+    log_message(LOG_INFO, "[fmt] decoder output: %u Hz, %u ch, %u bit", (unsigned)decoder_output_format.sample_rate, (unsigned)decoder_output_format.channels, (unsigned)decoder_output_format.bit_depth);
     
     ca_assert(NewAUGraph(&ao->graph));
     ca_assert(AUGraphOpen(ao->graph));
@@ -180,12 +210,8 @@ struct audio_output_t* audio_output_create(struct decoder_output_format_t decode
     ao->output_unit = _audio_output_create_add_unit(ao, kAudioUnitType_Output, kAudioUnitSubType_DefaultOutput, kAudioUnitManufacturer_Apple, &output_node);
 #endif
     
-    double use_speed = true;
-#if TARGET_OS_IPHONE
-    @autoreleasepool {
-        use_speed = [[UIDevice currentDevice].systemVersion floatValue] >= 6;
-    }
-#endif
+    // Varispeed is a resampler and is intentionally not used: drift is handled by sample slip in the audio queue.
+    double use_speed = false;
     
     if (use_speed) { // Darwin 11 is iOS 5. Varispeed is only available in iOS 5+.
         
@@ -201,6 +227,19 @@ struct audio_output_t* audio_output_create(struct decoder_output_format_t decode
     
     ca_assert(AUGraphInitialize(ao->graph));
     ca_assert(AUGraphUpdate(ao->graph, NULL));
+    
+    _log_unit_formats("mixer", ao->mixer_unit);
+    if (ao->converter_unit != NULL) _log_unit_formats("pre-mixer converter", ao->converter_unit);
+    if (ao->has_speed_control) _log_unit_formats("varispeed", ao->speed_unit);
+    _log_unit_formats("remoteio", ao->output_unit);
+    log_message(LOG_INFO, "[fmt] varispeed present: %s", ao->has_speed_control ? "yes" : "no");
+#if TARGET_OS_IPHONE
+    @autoreleasepool {
+        AVAudioSession* session = [AVAudioSession sharedInstance];
+        log_message(LOG_INFO, "[fmt] AVAudioSession: hardware sampleRate=%.1f Hz, preferred=%.1f Hz, IOBuffer=%.4f s, outputLatency=%.4f s, outputChannels=%d",
+                    session.sampleRate, session.preferredSampleRate, session.IOBufferDuration, session.outputLatency, (int)session.outputNumberOfChannels);
+    }
+#endif
     
     return ao;
     

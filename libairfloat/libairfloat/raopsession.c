@@ -492,7 +492,7 @@ void _raop_session_raop_connection_request_callback(web_server_connection_p conn
                     
                     audio_queue_start(rtp_session->queue);
                     
-                    web_headers_set_value(response_headers, "Audio-Latency", "11025");
+                    web_headers_set_value(response_headers, "Audio-Latency", "%u", (unsigned int)raop_runtime_get_audio_latency());
                     
                     if (rs->callbacks.started_recording != NULL)
                         rs->callbacks.started_recording(rs, rs->callbacks.ctx.started_recording);
